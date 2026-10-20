@@ -102,6 +102,6 @@ Then in n8n:
 - [ ] Interview-prep questions per job
 
 ## 👤 Author
-**Tovin** — [LinkedIn](https://www.linkedin.com/in/your-profile) · Try the bot: [@your_bot_username](https://t.me/your_bot_username)
+**Sam Tozeen** — [LinkedIn](https://www.linkedin.com/in/sam-tozeen-336216376?utm_source=share_via&utm_content=profile&utm_medium=member_android) · Try the bot: [@your_bot_username](https://t.me/your_bot_username)
 
 Licensed under MIT.
