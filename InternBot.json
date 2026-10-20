@@ -1,0 +1,2818 @@
+{
+  "name": "InternBot",
+  "nodes": [
+    {
+      "parameters": {
+        "updates": [
+          "message",
+          "callback_query"
+        ],
+        "additionalFields": {}
+      },
+      "name": "Telegram Trigger",
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -576,
+        16
+      ],
+      "id": "77eb7597-21b6-4349-913c-7c0edbd33469",
+      "credentials": {
+        "telegramApi": {
+          "id": "",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Daily free limits per user (change these numbers anytime)\nconst LIMITS = { resume: 5, ask: 30, apply: 10 };\nconst store = $getWorkflowStaticData('global');\nconst today = new Date(Date.now() + 5.5 * 3600e3).toISOString().slice(0, 10); // IST date\nconst use = (chatId, bucket) => {\n  store.usage = store.usage || {};\n  let u = store.usage[chatId];\n  if (!u || u.day !== today) u = store.usage[chatId] = { day: today };\n  if ((u[bucket] || 0) >= LIMITS[bucket]) return false;\n  u[bucket] = (u[bucket] || 0) + 1;\n  return true;\n};\nconst LIMIT_TEXT = {\n  resume: \"📄 You've uploaded your resume 5 times today. Please try again tomorrow 🙂\",\n  ask: \"💬 I've answered a lot of questions today! Please try again tomorrow, or just type a role to search.\",\n  apply: \"🎯 You've created 10 tailored resumes today (the free daily limit). Come back tomorrow for more 💪\"\n};\nreturn $input.all().map(i => {\n  const u = i.json;\n  const text = (u.message?.text || '').trim();\n  const chatId = u.message?.chat?.id ?? u.callback_query?.message?.chat?.id;\n  const data = u.callback_query?.data || '';\n  let route = 'other';\n  if (u.callback_query) route = data.startsWith('f:') ? 'filter' : data.startsWith('del:') ? 'delete' : 'button';\n  else if (u.message?.document) route = u.message.document.mime_type === 'application/pdf' ? 'resume' : 'other';\n  else if (/^\\/delete/i.test(text)) route = 'delete';\n  else if (/^\\/(start|help)/i.test(text) || /^(hi+|hello+|hey+|yo|hola|namaste|help|good (morning|afternoon|evening))\\b[!. ]*$/i.test(text)) route = 'start';\n  else if (/^\\/profile/i.test(text)) route = 'profile';\n  else if (/^\\/status/i.test(text)) route = 'status';\n  else if (/^\\/more/i.test(text) || /^(show |load |give |send )?(me )?(more|next|next page|aur|aur dikhao|another \\d*)( (internships?|jobs?|results?|options?))?( please| pls| plz)?[!. ]*$/i.test(text)) route = 'more';\n  else if (/^(thanks?|thank you|thx|ty|tq|ok+|okay|k|cool|nice|great|awesome|super|bye|good night|gn|done|got it|👍|🙏|❤️|😊|🔥)[!. ]*$/i.test(text)) route = 'chat';\n  else if (text && (/\\?/.test(text) || /^(can|could|would|will|how|what|why|when|where|who|which|do|does|did|is|are|am|should|please|pls|plz|i|i'm|im|my|me|tell|explain|help|find|show|get|give|search|looking|need|want|suggest|recommend|apply|send|write|kya|kaise)\\b/i.test(text) || text.split(/\\s+/).length > 6)) route = 'ask';\n  else if (text) route = 'search';\n  const pend = (store.pending || {})[chatId];\n  if (pend && Date.now() - pend.ts < 15 * 60e3 && ['search', 'ask', 'other'].includes(route) && text && !text.startsWith('/') && text.split(/\\s+/).length <= 4) route = 'filter';\n  // daily limits for the expensive actions\n  let limitText = null;\n  if (route === 'resume' && !use(chatId, 'resume')) limitText = LIMIT_TEXT.resume;\n  if (route === 'ask' && !use(chatId, 'ask')) limitText = LIMIT_TEXT.ask;\n  if (route === 'button' && data.startsWith('apply:') && !use(chatId, 'apply')) limitText = LIMIT_TEXT.apply;\n  if (limitText) route = 'limited';\n  return { json: { ...u, route, chatId, text, limitText } };\n});\n"
+      },
+      "name": "Route",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -352,
+        16
+      ],
+      "id": "2593c16e-ed31-4733-b06f-eee746788f73"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.route }}",
+                    "rightValue": "resume",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "resume"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.route }}",
+                    "rightValue": "start",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "start"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.route }}",
+                    "rightValue": "profile",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "profile"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.route }}",
+                    "rightValue": "search",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "search"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.route }}",
+                    "rightValue": "button",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "button"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.route }}",
+                    "rightValue": "other",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "other"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.route }}",
+                    "rightValue": "status",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "7142fb84-7ca5-4021-87b1-2309412ae1d6"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "status"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.route }}",
+                    "rightValue": "more",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "39c028e1-ff13-4ef0-8c7a-f2fdbb674638"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "more"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.route }}",
+                    "rightValue": "chat",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "066a39c8-825e-46ec-b2db-aa92686d5502"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "chat"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.route }}",
+                    "rightValue": "ask",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "3a5cc5b1-0cc5-499e-86d6-f9a1fe1de498"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "ask"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.route }}",
+                    "rightValue": "filter",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "a1aef931-48a7-44ea-adc6-d36c734367af"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "filter"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.route }}",
+                    "rightValue": "delete",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "26caae76-75eb-4590-8b2f-f1b6346e74a7"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "delete"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.route }}",
+                    "rightValue": "limited",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "22b13fd2-9bca-4656-995e-b3adaf84a051"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "limited"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Switch",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        -144,
+        -16
+      ],
+      "id": "dabb0834-7585-4072-bf86-be9cfe748bef"
+    },
+    {
+      "parameters": {
+        "resource": "file",
+        "fileId": "={{ $json.message.document.file_id }}",
+        "additionalFields": {}
+      },
+      "name": "Download Resume",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        128,
+        -288
+      ],
+      "id": "fe2655c5-7d04-4958-a954-42e9278118c4",
+      "credentials": {
+        "telegramApi": {
+          "id": "",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "pdf",
+        "options": {}
+      },
+      "name": "Extract PDF Text",
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1,
+      "position": [
+        352,
+        -288
+      ],
+      "id": "d4d5cb9e-f401-45d3-a0c9-e588456fcaa7"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googlePalmApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ contents: [{ parts: [{ text: \"You are a resume parser. Extract the candidate profile from the resume text below and return ONLY JSON with exactly these keys:\\n{\\\"name\\\": string, \\\"email\\\": string, \\\"phone\\\": string, \\\"college\\\": string, \\\"degree\\\": string, \\\"branch\\\": string, \\\"graduation_year\\\": number|null, \\\"cgpa\\\": number|null, \\\"skills\\\": string[], \\\"projects\\\": [{\\\"title\\\": string, \\\"tech\\\": string[], \\\"summary\\\": string}], \\\"experience\\\": [{\\\"role\\\": string, \\\"company\\\": string, \\\"duration\\\": string}], \\\"preferred_roles\\\": string[], \\\"location\\\": string}\\nFor preferred_roles, infer 3 suitable internship roles from the skills and projects. Use null or [] when missing.\\n\\nRESUME:\\n\" + $json.text }] }], generationConfig: { responseMimeType: 'application/json', temperature: 0 } }) }}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "name": "Gemini: Parse Resume",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        576,
+        -288
+      ],
+      "id": "7de12318-ecc9-472b-b118-ea606ea32c2c",
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1500,
+      "credentials": {
+        "googlePalmApi": {
+          "id": "",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// AI_BUSY: if both AI models failed, don't overwrite the saved profile\nif ($input.first().json.error) return [{ json: { chatId: $('Route').first().json.chatId, summary: \"⏳ I'm a bit busy right now (my AI helper hit its limit). Please send your resume again in a minute 🙏\" } }];\n// Parse Gemini's JSON and save the profile per Telegram user\nconst raw = $input.first().json.candidates?.[0]?.content?.parts?.[0]?.text || '{}';\nlet profile;\ntry { profile = JSON.parse(raw.replace(/```json|```/g, '').trim()); }\ncatch (e) { profile = { error: 'parse_failed', raw }; }\nconst chatId = $('Route').first().json.chatId;\nconst store = $getWorkflowStaticData('global');\nstore.profiles = store.profiles || {};\nstore.profiles[chatId] = { ...profile, rawText: ($('Extract PDF Text').first().json.text || '').slice(0, 8000), updatedAt: new Date().toISOString() };\nconst skills = (profile.skills || []);\nconst summary = profile.error\n  ? '⚠️ Could not read your resume. Please send a text-based PDF (not a scanned image).'\n  : `✅ Profile saved!\\n\\n👤 ${profile.name || '-'}\\n🎓 ${profile.degree || '-'}, ${profile.college || '-'} (${profile.graduation_year || '-'})\\n📈 CGPA: ${profile.cgpa ?? '-'}\\n🛠 ${skills.length} skills: ${skills.slice(0, 12).join(', ')}\\n🎯 Roles: ${(profile.preferred_roles || []).join(', ') || '-'}\\n\\nNow type a role, e.g. \"data analyst intern Bangalore\".`;\nreturn [{ json: { chatId, profile, summary } }];"
+      },
+      "name": "Save Profile",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        784,
+        -288
+      ],
+      "id": "e16ab6ae-b160-4f4a-b37a-603851d3aafa"
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Route').item.json.chatId }}",
+        "text": "={{ $json.summary }}",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "name": "Send Profile Summary",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1008,
+        -288
+      ],
+      "id": "1cd43092-3b8d-4591-bd70-4f32bf748a32",
+      "credentials": {
+        "telegramApi": {
+          "id": "",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Route').item.json.chatId }}",
+        "text": "=👋 Hi {{ $json.message.from.first_name }}! I'm InternBot.\n\n1️⃣ Send your resume as a PDF 📎\n2️⃣ Type a role, e.g. \"frontend developer\" — I'll ask city, type & work mode\n3️⃣ Tap ✅ Apply on a match: I tailor your resume for that job + give ready answers\n\nCommands:\n/profile — your saved profile\n/status — internships you've applied to\n/delete — erase all your data\n\n🔒 Privacy: your resume is only used to match jobs and tailor applications. It's never shared. Send /delete anytime to erase everything.\n\n🆓 Free daily limits: 10 searches, 10 tailored resumes, 5 resume uploads.",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "name": "Welcome",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        128,
+        -112
+      ],
+      "id": "4aede601-5fbe-4ca5-b940-cdbaa6c03b04",
+      "credentials": {
+        "telegramApi": {
+          "id": "",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const chatId = $json.chatId;\nconst p = ($getWorkflowStaticData('global').profiles || {})[chatId];\nconst text = p\n  ? `📄 Your profile\\n\\n👤 ${p.name || '-'}\\n📧 ${p.email || '-'}\\n🎓 ${p.degree || '-'}, ${p.college || '-'}\\n📈 CGPA: ${p.cgpa ?? '-'}\\n🛠 Skills: ${(p.skills || []).join(', ')}\\n🎯 Roles: ${(p.preferred_roles || []).join(', ')}\\n🕒 Updated: ${p.updatedAt}`\n  : 'No profile yet. Send your resume as a PDF to get started 📎';\nreturn [{ json: { chatId, text } }];"
+      },
+      "name": "Load Profile",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        128,
+        80
+      ],
+      "id": "b8a42b96-57ee-46a0-8635-723e82dba7de"
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Route').item.json.chatId }}",
+        "text": "={{ $json.text }}",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "name": "Send Profile",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        352,
+        80
+      ],
+      "id": "b9df6c90-904e-41f4-ada7-c288a648849d",
+      "credentials": {
+        "telegramApi": {
+          "id": "",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Route').item.json.chatId }}",
+        "text": "=Please send your resume as a PDF 📎 or type a role to search.",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "name": "Fallback",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        704,
+        1520
+      ],
+      "id": "fb322e54-67a0-45b5-9de4-b6b46c47341e",
+      "credentials": {
+        "telegramApi": {
+          "id": "",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Route').item.json.chatId }}",
+        "text": "={{ $('Route').item.json.route === 'more' ? '🔍 Finding more for you…' : '🔍 On it! Searching: ' + $('Search Wizard').item.json.label + '…' }}",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "id": "70441143-eecf-414b-836f-019f21904309",
+      "name": "Searching Msg",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        704,
+        544
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const r = $('Route').first().json;\nconst store = $getWorkflowStaticData('global');\nconst profile = (store.profiles || {})[r.chatId] || null;\nif (r.route === 'more') {\n  const ls = (store.lastSearch || {})[r.chatId];\n  return [{ json: { chatId: r.chatId, userQuery: ls.userQuery, q: ls.q, cursor: ls.cursor || '', isMore: true, profile } }];\n}\nconst w = $('Search Wizard').first().json;\nreturn [{ json: { chatId: r.chatId, userQuery: w.label, q: w.query, cursor: '', isMore: false, profile } }];\n"
+      },
+      "id": "a822a721-6ede-4372-87b9-0550ff8e230c",
+      "name": "Build Query",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        928,
+        544
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://jsearch.p.rapidapi.com/search-v2",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "query",
+              "value": "={{ $json.q }}"
+            },
+            {
+              "name": "num_pages",
+              "value": "1"
+            },
+            {
+              "name": "country",
+              "value": "in"
+            },
+            {
+              "name": "date_posted",
+              "value": "month"
+            },
+            {
+              "name": "cursor",
+              "value": "={{ $json.cursor }}"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-RapidAPI-Host",
+              "value": "jsearch.p.rapidapi.com"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "daaeee6f-ea21-43a3-a333-a84e7a171959",
+      "name": "JSearch API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1152,
+        544
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "",
+          "name": "Header Auth account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const res = $input.first().json;\nconst ctx = $('Build Query').first().json;\nconst list = Array.isArray(res.data) ? res.data : (res.data?.jobs || res.data?.data || res.jobs || []);\nconst stamp = Date.now().toString(36).slice(-5);\nconst jobs = list.slice(0, 10).map((j, i) => ({\n  i, key: stamp + i,\n  title: j.job_title,\n  company: j.employer_name,\n  location: [j.job_city, j.job_state].filter(Boolean).join(', ') || j.job_country || '',\n  remote: !!j.job_is_remote,\n  posted: j.job_posted_at_datetime_utc,\n  link: j.job_apply_link || j.job_google_link,\n  publisher: j.job_publisher,\n  salary: j.job_min_salary ? (j.job_min_salary + (j.job_max_salary ? '-' + j.job_max_salary : '') + ' ' + (j.job_salary_currency || '') + '/' + (j.job_salary_period || '')) : null,\n  desc: (j.job_description || '').slice(0, 1500)\n}));\n// remember jobs by key so Apply buttons on older cards still work (keep the latest 60)\nconst store = $getWorkflowStaticData('global');\nstore.jobIndex = store.jobIndex || {};\nconst idx = { ...(store.jobIndex[ctx.chatId] || {}) };\nfor (const j of jobs) idx[j.key] = j;\nstore.jobIndex[ctx.chatId] = Object.fromEntries(Object.entries(idx).slice(-60));\nconst cursorNext = res.data?.cursor || res.cursor || res.data?.next_cursor || null;\nreturn [{ json: { ...ctx, jobs, count: jobs.length, cursorNext, error: res.error?.message || res.message || null } }];"
+      },
+      "id": "686fcbda-1c0b-473f-8d82-04a26c934c75",
+      "name": "Prepare Jobs",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1360,
+        544
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "4ffe77f1-cd6d-4995-ba32-217c1d771125",
+              "leftValue": "={{ $json.count }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "270fce39-5eeb-453e-9f37-6107eaea5807",
+      "name": "Any Jobs?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1584,
+        544
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googlePalmApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ contents: [{ parts: [{ text: \"You are a career assistant matching a student to internships. Score each job 0-100 for fit with the candidate profile (skills, projects, degree, preferred roles). Give a short reason (max 15 words) naming the matching skills or the main gap. Return ONLY JSON: {\\\"ranked\\\":[{\\\"i\\\":number,\\\"score\\\":number,\\\"reason\\\":string}]} including every job.\" + '\\n\\nCANDIDATE PROFILE:\\n' + JSON.stringify($json.profile || {note: 'No resume uploaded; score on general fit for a student'}) + '\\n\\nJOBS:\\n' + JSON.stringify($json.jobs.map(j => ({ i: j.i, title: j.title, company: j.company, location: j.location, description: j.desc.slice(0, 600) }))) }] }], generationConfig: { responseMimeType: 'application/json', temperature: 0 } }) }}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "5bd856db-34b9-41ab-a769-ef499ba26a8b",
+      "name": "Gemini: Rank Jobs",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1808,
+        528
+      ],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1500,
+      "credentials": {
+        "googlePalmApi": {
+          "id": "",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const ctx = $('Prepare Jobs').first().json;\nlet ranked = [];\ntry {\n  const parts = $input.first().json.candidates?.[0]?.content?.parts || [];\n  const raw = parts.filter(p => !p.thought).map(p => p.text || '').join('') || '{}';\n  ranked = JSON.parse(raw.replace(/```json|```/g, '').trim()).ranked || [];\n} catch (e) {}\nconst esc = s => String(s ?? '').replace(/&(?!amp;|lt;|gt;|quot;|#)/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');\nconst ago = d => { if (!d) return ''; const days = Math.floor((Date.now() - new Date(d)) / 864e5); return days <= 0 ? 'today' : days + 'd ago'; };\nconst store = $getWorkflowStaticData('global');\nstore.lastSearch = store.lastSearch || {};\nconst prev = ctx.isMore ? (store.lastSearch[ctx.chatId] || {}) : {};\nconst seen = new Set(prev.seen || []);\nconst all = ctx.jobs.map(j => ({ ...j, ...(ranked.find(r => r.i === j.i) || {}) }))\n  .filter(j => !seen.has((j.title + '|' + j.company).toLowerCase()))\n  .sort((a, b) => (b.score ?? -1) - (a.score ?? -1));\nconst toCard = j => {\n  let body = `🏢 ${esc(j.company)}\\n📍 ${esc(j.location)}${j.remote ? ' · Remote' : ''}`;\n  if (j.salary) body += `\\n💰 ${esc(j.salary)}`;\n  if (j.posted) body += `\\n🕒 Posted ${ago(j.posted)}${j.publisher ? ' on ' + esc(j.publisher) : ''}`;\n  if (j.score != null) body += `\\n🎯 Match: <b>${j.score}%</b> — ${esc(j.reason)}`;\n  return { chatId: ctx.chatId, idx: j.key, link: j.link || ('https://www.google.com/search?q=' + encodeURIComponent(j.title + ' ' + j.company)), title: esc(j.title), body };\n};\nconst cards = all.map(toCard);\nconst show = cards.slice(0, 5), queue = cards.slice(5);\nconst shownBefore = prev.shown || 0;\nstore.lastSearch[ctx.chatId] = {\n  q: ctx.q, userQuery: ctx.userQuery, cursor: ctx.cursorNext, queue,\n  shown: shownBefore + show.length,\n  seen: [...seen, ...all.map(j => (j.title + '|' + j.company).toLowerCase())].slice(-200)\n};\nconst hasMore = queue.length > 0 || !!ctx.cursorNext;\nreturn show.map((cd, n) => {\n  let text = `<b>${shownBefore + n + 1}. ${cd.title}</b>\\n${cd.body}`;\n  if (n === 0 && !ctx.profile) text += '\\n\\n💡 Send your resume PDF and I\\'ll show match scores.';\n  if (n === show.length - 1) text += hasMore ? '\\n\\n💬 Type <b>more</b> for more internships, or send another role to search.' : \"\\n\\n✨ That's everything I found for this search. Try another role or city!\";\n  return { json: { chatId: cd.chatId, idx: cd.idx, link: cd.link, text } };\n});"
+      },
+      "id": "bccf72e5-050a-4c00-ad33-a27127b51cce",
+      "name": "Build Cards",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2032,
+        528
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.chatId }}",
+        "text": "={{ $json.text }}",
+        "replyMarkup": "inlineKeyboard",
+        "inlineKeyboard": {
+          "rows": [
+            {
+              "row": {
+                "buttons": [
+                  {
+                    "text": "✅ Apply with InternBot",
+                    "additionalFields": {
+                      "callback_data": "=apply:{{ $json.idx }}"
+                    }
+                  },
+                  {
+                    "text": "🔗 Open listing",
+                    "additionalFields": {
+                      "url": "={{ $json.link }}"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        "additionalFields": {
+          "appendAttribution": false,
+          "disable_web_page_preview": true,
+          "parse_mode": "HTML"
+        }
+      },
+      "id": "0718159d-ecc8-4ace-9227-782738872898",
+      "name": "Send Job Card",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        2240,
+        528
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.chatId }}",
+        "text": "={{ $json.error ? '😕 Job search is taking a short break right now (busy or daily limit reached). Please try again in a while 🙏' : '😕 No results for \"' + $json.userQuery + '\".\\n\\nTry a nearby city, \"Anywhere in India\", or a related role 🙂' }}",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "id": "81a25530-9bd8-4d49-ba61-db9059a95452",
+      "name": "No Results",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1808,
+        832
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googlePalmApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ contents: [{ parts: [{ text: \"You are a resume parser. Extract the candidate profile from the resume text below and return ONLY JSON with exactly these keys:\\n{\\\"name\\\": string, \\\"email\\\": string, \\\"phone\\\": string, \\\"college\\\": string, \\\"degree\\\": string, \\\"branch\\\": string, \\\"graduation_year\\\": number|null, \\\"cgpa\\\": number|null, \\\"skills\\\": string[], \\\"projects\\\": [{\\\"title\\\": string, \\\"tech\\\": string[], \\\"summary\\\": string}], \\\"experience\\\": [{\\\"role\\\": string, \\\"company\\\": string, \\\"duration\\\": string}], \\\"preferred_roles\\\": string[], \\\"location\\\": string}\\nFor preferred_roles, infer 3 suitable internship roles from the skills and projects. Use null or [] when missing.\\n\\nRESUME:\\n\" + $json.text }] }], generationConfig: { responseMimeType: 'application/json', temperature: 0 } }) }}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "name": "Gemini: Parse Resume (backup)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        576,
+        -160
+      ],
+      "id": "c7f70cb0-1e68-49dd-b9e7-c6c53614c102",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1500,
+      "credentials": {
+        "googlePalmApi": {
+          "id": "",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googlePalmApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ contents: [{ parts: [{ text: \"You are a career assistant matching a student to internships. Score each job 0-100 for fit with the candidate profile (skills, projects, degree, preferred roles). Give a short reason (max 15 words) naming the matching skills or the main gap. Return ONLY JSON: {\\\"ranked\\\":[{\\\"i\\\":number,\\\"score\\\":number,\\\"reason\\\":string}]} including every job.\" + '\\n\\nCANDIDATE PROFILE:\\n' + JSON.stringify($json.profile || {note: 'No resume uploaded; score on general fit for a student'}) + '\\n\\nJOBS:\\n' + JSON.stringify($json.jobs.map(j => ({ i: j.i, title: j.title, company: j.company, location: j.location, description: j.desc.slice(0, 600) }))) }] }], generationConfig: { responseMimeType: 'application/json', temperature: 0 } }) }}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "6d5c1d48-a50f-4b96-a095-1bf157eb0e1d",
+      "name": "Gemini: Rank Jobs (backup)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1808,
+        672
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1500,
+      "credentials": {
+        "googlePalmApi": {
+          "id": "",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const r = $('Route').first().json;\nconst [action, key] = (r.callback_query.data || '').split(':');\nconst store = $getWorkflowStaticData('global');\nconst job = (store.jobIndex?.[r.chatId] || {})[key] || null;\nconst profile = (store.profiles || {})[r.chatId] || null;\nreturn [{ json: { chatId: r.chatId, action: job ? action : 'missing', key, job, profile } }];"
+      },
+      "id": "b808569f-c589-4727-bc15-dfe16e55bbe0",
+      "name": "Parse Button",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        704,
+        1008
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "0eddfa34-8119-471c-9f64-05df524d16e6",
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "apply",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "apply"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "65ad1c57-1fe1-4c30-9f66-743c5c147a85",
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "done",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "done"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "1f0946ab-1281-460f-a45f-acabaa52cee0",
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "missing",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "missing"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "1f2a2400-d3c5-43c5-aa9d-d39f4db52780",
+      "name": "Button Action",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        928,
+        1008
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.chatId }}",
+        "text": "=🛠️ Tailoring your resume for {{ $json.job.title }} at {{ $json.job.company }}… (about 20 seconds)",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "id": "4539a1b3-0739-4df4-89a0-a91d51c51d7b",
+      "name": "Drafting Msg",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1152,
+        944
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googlePalmApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ contents: [{ parts: [{ text: \"You are an expert resume writer for Indian engineering students applying to internships.\\nUsing ONLY the candidate's real information (profile + original resume text), produce a resume TAILORED to the job, plus an apply kit.\\nSTRICT RULES: never invent skills, tools, projects, companies, numbers or achievements. You MAY reorder, select the most relevant items, rewrite the summary, and rephrase bullets using the job's wording when it truthfully describes what the candidate did. Use plain ASCII characters only (write Rs. instead of the rupee sign, use - for dashes).\\nReturn ONLY JSON:\\n{\\\"resume\\\":{\\\"name\\\":string,\\\"contact\\\":string,\\\"summary\\\":string,\\\"skills\\\":[string],\\\"projects\\\":[{\\\"title\\\":string,\\\"tech\\\":string,\\\"bullets\\\":[string]}],\\\"experience\\\":[{\\\"role\\\":string,\\\"company\\\":string,\\\"duration\\\":string,\\\"bullets\\\":[string]}],\\\"education\\\":[{\\\"degree\\\":string,\\\"school\\\":string,\\\"years\\\":string,\\\"score\\\":string}],\\\"extras\\\":[string]},\\n\\\"keywords_missing\\\":[string],\\n\\\"answers\\\":{\\\"why_hire\\\":string,\\\"why_role\\\":string,\\\"relevant_project\\\":string},\\n\\\"short_note\\\":string}\\nGuidance: summary 2 sentences aimed at this role; skills ordered most-relevant first (max 14); projects most relevant first with 2-3 bullets each; contact = email | phone | location; keywords_missing = up to 6 important job keywords the candidate does NOT show (suggestions only); each answer 40-70 words in first person; short_note 3-4 lines for email/LinkedIn to the recruiter.\" + '\\n\\nCANDIDATE PROFILE:\\n' + JSON.stringify(Object.assign({}, $('Parse Button').item.json.profile || {}, { rawText: undefined })) + '\\n\\nORIGINAL RESUME TEXT:\\n' + (($('Parse Button').item.json.profile || {}).rawText || '(not available)') + '\\n\\nJOB:\\n' + JSON.stringify({ title: $('Parse Button').item.json.job.title, company: $('Parse Button').item.json.job.company, location: $('Parse Button').item.json.job.location, description: ($('Parse Button').item.json.job.desc || '').slice(0, 1500) }) }] }], generationConfig: { responseMimeType: 'application/json', temperature: 0.3 } }) }}",
+        "options": {
+          "timeout": 90000
+        }
+      },
+      "id": "9f5f2ece-4706-4d1b-a4bb-39a2337ac06e",
+      "name": "Gemini: Apply Kit",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1360,
+        944
+      ],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1500,
+      "credentials": {
+        "googlePalmApi": {
+          "id": "",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googlePalmApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ contents: [{ parts: [{ text: \"You are an expert resume writer for Indian engineering students applying to internships.\\nUsing ONLY the candidate's real information (profile + original resume text), produce a resume TAILORED to the job, plus an apply kit.\\nSTRICT RULES: never invent skills, tools, projects, companies, numbers or achievements. You MAY reorder, select the most relevant items, rewrite the summary, and rephrase bullets using the job's wording when it truthfully describes what the candidate did. Use plain ASCII characters only (write Rs. instead of the rupee sign, use - for dashes).\\nReturn ONLY JSON:\\n{\\\"resume\\\":{\\\"name\\\":string,\\\"contact\\\":string,\\\"summary\\\":string,\\\"skills\\\":[string],\\\"projects\\\":[{\\\"title\\\":string,\\\"tech\\\":string,\\\"bullets\\\":[string]}],\\\"experience\\\":[{\\\"role\\\":string,\\\"company\\\":string,\\\"duration\\\":string,\\\"bullets\\\":[string]}],\\\"education\\\":[{\\\"degree\\\":string,\\\"school\\\":string,\\\"years\\\":string,\\\"score\\\":string}],\\\"extras\\\":[string]},\\n\\\"keywords_missing\\\":[string],\\n\\\"answers\\\":{\\\"why_hire\\\":string,\\\"why_role\\\":string,\\\"relevant_project\\\":string},\\n\\\"short_note\\\":string}\\nGuidance: summary 2 sentences aimed at this role; skills ordered most-relevant first (max 14); projects most relevant first with 2-3 bullets each; contact = email | phone | location; keywords_missing = up to 6 important job keywords the candidate does NOT show (suggestions only); each answer 40-70 words in first person; short_note 3-4 lines for email/LinkedIn to the recruiter.\" + '\\n\\nCANDIDATE PROFILE:\\n' + JSON.stringify(Object.assign({}, $('Parse Button').item.json.profile || {}, { rawText: undefined })) + '\\n\\nORIGINAL RESUME TEXT:\\n' + (($('Parse Button').item.json.profile || {}).rawText || '(not available)') + '\\n\\nJOB:\\n' + JSON.stringify({ title: $('Parse Button').item.json.job.title, company: $('Parse Button').item.json.job.company, location: $('Parse Button').item.json.job.location, description: ($('Parse Button').item.json.job.desc || '').slice(0, 1500) }) }] }], generationConfig: { responseMimeType: 'application/json', temperature: 0.3 } }) }}",
+        "options": {
+          "timeout": 90000
+        }
+      },
+      "id": "aae078be-20d3-459e-8392-2dc8869c3326",
+      "name": "Gemini: Apply Kit (backup)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1360,
+        1088
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1500,
+      "credentials": {
+        "googlePalmApi": {
+          "id": "",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const ctx = $json;\nconst store = $getWorkflowStaticData('global');\nstore.applications = store.applications || {};\nconst apps = store.applications[ctx.chatId] = store.applications[ctx.chatId] || [];\nif (!apps.find(a => a.key === ctx.key)) apps.push({ key: ctx.key, title: ctx.job.title, company: ctx.job.company, link: ctx.job.link, date: new Date().toISOString().slice(0, 10), status: 'Applied' });\nreturn [{ json: { chatId: ctx.chatId, text: `📌 Logged: ${ctx.job.title} at ${ctx.job.company}\\nYou've applied to ${apps.length} internship${apps.length === 1 ? '' : 's'} so far. Send /status to see them.` } }];"
+      },
+      "id": "63d08f54-0625-49e9-9380-7d1d3bd519c4",
+      "name": "Log Application",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1152,
+        1248
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.chatId }}",
+        "text": "={{ $json.text }}",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "id": "36761d53-d7ce-4fc5-8cd6-2c0feb3a4aa2",
+      "name": "Send Logged",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1360,
+        1248
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.chatId }}",
+        "text": "=⌛ I couldn't find that job any more. Please search again and tap Apply on a new card.",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "id": "b6c34cca-e97e-4115-ae57-cb79232644b8",
+      "name": "Job Expired",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1152,
+        1392
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const chatId = $json.chatId;\nconst apps = ($getWorkflowStaticData('global').applications || {})[chatId] || [];\nconst esc = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');\nconst text = apps.length\n  ? `📋 <b>Your applications (${apps.length})</b>\\n\\n` + apps.slice(-15).reverse().map((a, n) => `${n + 1}. <b>${esc(a.title)}</b>\\n    ${esc(a.company)} · ${a.date} · ${a.status}`).join('\\n')\n  : \"You haven't marked any applications yet. Search a role, tap ✅ Apply, then Mark as applied.\";\nreturn [{ json: { chatId, text } }];"
+      },
+      "id": "1f2a9281-6530-4501-885e-aa230af2b784",
+      "name": "Load Applications",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        704,
+        1664
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.chatId }}",
+        "text": "={{ $json.text }}",
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "HTML"
+        }
+      },
+      "id": "94754ce5-0e75-4746-ba8c-01def8dd6d10",
+      "name": "Send Status",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        928,
+        1664
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// ---- daily search limits: 10 per user, 150 for the whole bot (protects the free API quota)\nconst _today = new Date(Date.now() + 5.5 * 3600e3).toISOString().slice(0, 10);\nconst _useSearch = (st, id) => {\n  st.usage = st.usage || {};\n  const g = st.usage._global && st.usage._global.day === _today ? st.usage._global : (st.usage._global = { day: _today, search: 0 });\n  let u = st.usage[id]; if (!u || u.day !== _today) u = st.usage[id] = { day: _today };\n  if ((u.search || 0) >= 10) return \"🔍 You've done 10 searches today (the free daily limit). Come back tomorrow, or type more to see more results from your last search 🙂\";\n  if ((g.search || 0) >= 150) return \"😅 InternBot is very popular today and hit its daily search limit. Please try again tomorrow!\";\n  u.search = (u.search || 0) + 1; g.search = (g.search || 0) + 1; return null;\n};\nconst r = $('Route').first().json;\nconst store = $getWorkflowStaticData('global');\nconst ls = (store.lastSearch || {})[r.chatId];\nif (!ls) return [{ json: { kind: 'reply', chatId: r.chatId, text: \"Let's start with a search first 🙂 Type a role like \\\"frontend developer\\\" or \\\"data analyst intern Pune\\\".\" } }];\nif (ls.queue && ls.queue.length) {\n  const take = ls.queue.splice(0, 5);\n  const start = ls.shown || 0;\n  ls.shown = start + take.length;\n  const hasMore = ls.queue.length > 0 || !!ls.cursor;\n  return take.map((cd, n) => {\n    let text = `<b>${start + n + 1}. ${cd.title}</b>\\n${cd.body}`;\n    if (n === take.length - 1) text += hasMore ? '\\n\\n💬 Type <b>more</b> for even more.' : \"\\n\\n✨ That's all for \\\"\" + ls.userQuery + \"\\\". Try another role or city!\";\n    return { json: { kind: 'cards', chatId: cd.chatId, idx: cd.idx, link: cd.link, text } };\n  });\n}\nif (ls.cursor) { const _lim = _useSearch(store, r.chatId); if (_lim) return [{ json: { kind: 'reply', chatId: r.chatId, text: _lim } }]; return [{ json: { kind: 'fetch', chatId: r.chatId } }]; }\nreturn [{ json: { kind: 'reply', chatId: r.chatId, text: \"That's all I could find for \\\"\" + ls.userQuery + \"\\\" 🙌 Try a nearby city, \\\"remote\\\", or a related role like \\\"business analyst intern\\\".\" } }];"
+      },
+      "id": "d0ef9b3b-efda-4a5c-8c23-edf172e3b0e1",
+      "name": "More Jobs",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        704,
+        768
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "8e864fca-8805-4ecb-b268-0e391c3d86ab",
+                    "leftValue": "={{ $json.kind }}",
+                    "rightValue": "cards",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "cards"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "4b9d594f-c95f-456a-a1ef-c0f604fc9e9a",
+                    "leftValue": "={{ $json.kind }}",
+                    "rightValue": "fetch",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "fetch"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "3921f61c-6280-42f4-befd-18ec9600abcf",
+                    "leftValue": "={{ $json.kind }}",
+                    "rightValue": "reply",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "reply"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "126a5b43-5996-4daf-82f9-50cad8d33540",
+      "name": "More Kind",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        928,
+        768
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.chatId }}",
+        "text": "={{ $json.text }}",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "id": "35095402-80b3-4361-83bb-4d5833d8c670",
+      "name": "More Reply",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1152,
+        800
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const r = $('Route').first().json;\nconst t = r.text.toLowerCase();\nconst pick = a => a[Math.floor(Math.random() * a.length)];\nlet text;\nif (/bye|good night|gn/.test(t)) text = pick(['Bye! 👋 Good luck with your applications!', 'Good night! 🌙 Come back anytime for new internships.']);\nelse if (/thank|thx|ty|tq|🙏|❤️/.test(t)) text = pick([\"You're welcome! 😊 Type more for more internships, or a new role to search.\", 'Happy to help! 🙌 Want more? Just type more.']);\nelse text = pick(['👍 Anything else? Type a role to search, more for more results, or /status to see your applications.', 'Cool! 😊 I\\'m here whenever you want to search more internships.']);\nreturn [{ json: { chatId: r.chatId, text } }];"
+      },
+      "id": "eb06727f-146a-4b72-9254-017afccedd44",
+      "name": "Friendly Reply",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        704,
+        1808
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.chatId }}",
+        "text": "={{ $json.text }}",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "id": "2b94b65b-bc5c-4063-998f-ca46a3dc2383",
+      "name": "Send Friendly",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        928,
+        1808
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googlePalmApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ contents: [{ parts: [{ text: \"You are InternBot, a friendly Telegram assistant that helps engineering students find internships. Reply in the same language/style as the user (simple English, Hinglish if they use it), max 70 words, warm and encouraging, 1-2 emojis max.\\n\\nWHAT YOU CAN DO:\\n- Search real internships: user types a role (e.g. \\\"frontend developer Pune\\\"); you show 5 at a time; typing \\\"more\\\" shows more.\\n- If the user uploaded a resume PDF, each job gets a match % and reason.\\n- On each job card, the \\\"Apply with InternBot\\\" button creates a resume PDF tailored to that job (reordered and rephrased, nothing invented) plus ready answers for common application questions and a short recruiter note; then \\\"Open & apply\\\" opens the job page and \\\"Mark as applied\\\" saves it to the tracker.\\n- /status shows tracked applications, /profile shows the saved profile. /delete erases all their data (privacy: resumes are only used for matching and tailoring, never shared). Free daily limits: 10 searches, 10 tailored resumes, 5 resume uploads.\\nWHAT YOU CANNOT DO: you cannot submit applications on company websites or job portals yourself (they require the student's own login and often captchas). Be honest about this and explain the 1-tap flow instead.\\n\\nDecide the user's intent:\\n- \\\"search\\\" if they are asking to find/see/look for internships or jobs for a role, skill or place. Put a clean search phrase in \\\"query\\\" (role + location if given, e.g. \\\"frontend developer intern Pune\\\").\\n- \\\"reply\\\" for anything else (questions, help, small talk). Put your answer in \\\"reply\\\".\\nReturn ONLY JSON: {\\\"intent\\\":\\\"search\\\"|\\\"reply\\\",\\\"query\\\":string,\\\"reply\\\":string}\" + '\\n\\nCONTEXT: resume uploaded = ' + $('Ask Context').item.json.hasResume + '\\n\\nUSER MESSAGE: ' + $('Ask Context').item.json.text }] }], generationConfig: { responseMimeType: 'application/json', temperature: 0.3 } }) }}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "b62f0763-51b8-495c-b733-6ebc4e6a6b80",
+      "name": "Gemini: Understand",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        928,
+        1968
+      ],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1500,
+      "credentials": {
+        "googlePalmApi": {
+          "id": "",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googlePalmApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ contents: [{ parts: [{ text: \"You are InternBot, a friendly Telegram assistant that helps engineering students find internships. Reply in the same language/style as the user (simple English, Hinglish if they use it), max 70 words, warm and encouraging, 1-2 emojis max.\\n\\nWHAT YOU CAN DO:\\n- Search real internships: user types a role (e.g. \\\"frontend developer Pune\\\"); you show 5 at a time; typing \\\"more\\\" shows more.\\n- If the user uploaded a resume PDF, each job gets a match % and reason.\\n- On each job card, the \\\"Apply with InternBot\\\" button creates a resume PDF tailored to that job (reordered and rephrased, nothing invented) plus ready answers for common application questions and a short recruiter note; then \\\"Open & apply\\\" opens the job page and \\\"Mark as applied\\\" saves it to the tracker.\\n- /status shows tracked applications, /profile shows the saved profile. /delete erases all their data (privacy: resumes are only used for matching and tailoring, never shared). Free daily limits: 10 searches, 10 tailored resumes, 5 resume uploads.\\nWHAT YOU CANNOT DO: you cannot submit applications on company websites or job portals yourself (they require the student's own login and often captchas). Be honest about this and explain the 1-tap flow instead.\\n\\nDecide the user's intent:\\n- \\\"search\\\" if they are asking to find/see/look for internships or jobs for a role, skill or place. Put a clean search phrase in \\\"query\\\" (role + location if given, e.g. \\\"frontend developer intern Pune\\\").\\n- \\\"reply\\\" for anything else (questions, help, small talk). Put your answer in \\\"reply\\\".\\nReturn ONLY JSON: {\\\"intent\\\":\\\"search\\\"|\\\"reply\\\",\\\"query\\\":string,\\\"reply\\\":string}\" + '\\n\\nCONTEXT: resume uploaded = ' + $('Ask Context').item.json.hasResume + '\\n\\nUSER MESSAGE: ' + $('Ask Context').item.json.text }] }], generationConfig: { responseMimeType: 'application/json', temperature: 0.3 } }) }}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "5544831a-10c4-4c9b-8c21-8dc88e48bcb7",
+      "name": "Gemini: Understand (backup)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        928,
+        2096
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1500,
+      "credentials": {
+        "googlePalmApi": {
+          "id": "",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const r = $('Route').first().json;\n// AI_BUSY\nif ($input.first().json.error) return [{ json: { kind: 'reply', chatId: r.chatId, text: \"⏳ I'm a bit busy right now (my AI helper hit its limit). Please try again in a minute 🙏 You can still type a role like \\\"frontend developer\\\" to search.\" } }];\nlet out = {};\ntry {\n  const parts = $input.first().json.candidates?.[0]?.content?.parts || [];\n  out = JSON.parse(parts.filter(p => !p.thought).map(p => p.text || '').join('').replace(/```json|```/g, '').trim());\n} catch (e) {}\nif (out.intent === 'search' && out.query) return [{ json: { kind: 'search', chatId: r.chatId, query: out.query } }];\nreturn [{ json: { kind: 'reply', chatId: r.chatId, text: out.reply || \"I'm here to help you find internships 😊 Type a role like \\\"frontend developer\\\", or send your resume PDF for match scores.\" } }];"
+      },
+      "id": "8cc5ebb1-d613-4f6e-bedc-2cd4f5460fa3",
+      "name": "Decide",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1152,
+        1968
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "34efe17f-4058-48b7-9dd7-136c55c7f9ba",
+                    "leftValue": "={{ $json.kind }}",
+                    "rightValue": "search",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "search"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "4add4eef-7ac0-44c5-94ab-fc85e7b49212",
+                    "leftValue": "={{ $json.kind }}",
+                    "rightValue": "reply",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "reply"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a1995a76-0e58-4d40-8575-49faecf6106a",
+      "name": "Ask Kind",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        1360,
+        1968
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.chatId }}",
+        "text": "={{ $json.text }}",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "id": "5ec4f7a4-0855-4381-9b8f-eed9775e013f",
+      "name": "Send Answer",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1584,
+        2032
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const r = $('Route').first().json;\nconst hasResume = !!(($getWorkflowStaticData('global').profiles || {})[r.chatId]);\nreturn [{ json: { chatId: r.chatId, text: r.text, hasResume } }];"
+      },
+      "id": "5eac8cf7-8030-4806-bee9-716102b15eae",
+      "name": "Ask Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        704,
+        1968
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const ctx = $('Parse Button').first().json;\nlet kit = null;\ntry {\n  const parts = $input.first().json.candidates?.[0]?.content?.parts || [];\n  kit = JSON.parse(parts.filter(p => !p.thought).map(p => p.text || '').join('').replace(/```json|```/g, '').trim());\n} catch (e) {}\nif (!kit || !kit.resume) {\n  return [{ json: { ok: false, chatId: ctx.chatId, key: ctx.key, link: ctx.job.link || 'https://www.google.com', text: \"⏳ I'm a bit busy right now (my AI helper hit its limit). Please tap Apply again in a minute 🙏\" } }];\n}\nconst R = kit.resume;\nconst A = s => String(s ?? '').replace(/[‘’]/g, \"'\").replace(/[“”]/g, '\"').replace(/[–—]/g, '-').replace(/•/g, '-').replace(/₹/g, 'Rs.').replace(/[^\\x20-\\x7E]/g, '');\n// ---- tiny PDF writer (A4, Helvetica) ----\nconst W = 495, X = 50;\nconst lines = [];\nconst wrap = (t, size, width) => { const max = Math.floor(width / (size * 0.5)); const out = []; let cur = ''; for (const w of A(t).split(/\\s+/)) { if ((cur + ' ' + w).trim().length > max) { if (cur) out.push(cur); cur = w; } else cur = (cur + ' ' + w).trim(); } if (cur) out.push(cur); return out; };\nconst add = (t, f = 'F1', s = 10, x = X, gap = 0) => wrap(t, s, W - (x - X)).forEach((l, i) => lines.push({ t: l, f, s, x, gap: i === 0 ? gap : 0 }));\nconst section = t => { lines.push({ t: A(t).toUpperCase(), f: 'F2', s: 11, x: X, gap: 8, rule: true }); };\nadd(R.name || 'Resume', 'F2', 18);\nadd(R.contact || '', 'F1', 9.5, X, 2);\nif (R.summary) { section('Summary'); add(R.summary); }\nif ((R.skills || []).length) { section('Skills'); add(R.skills.join(', ')); }\nif ((R.projects || []).length) { section('Projects'); for (const p of R.projects) { add(p.title + (p.tech ? ' (' + p.tech + ')' : ''), 'F2', 10, X, 4); for (const b of p.bullets || []) add('- ' + b, 'F1', 10, X + 12); } }\nif ((R.experience || []).length) { section('Experience'); for (const e of R.experience) { add(e.role + ' - ' + e.company + (e.duration ? ' (' + e.duration + ')' : ''), 'F2', 10, X, 4); for (const b of e.bullets || []) add('- ' + b, 'F1', 10, X + 12); } }\nif ((R.education || []).length) { section('Education'); for (const e of R.education) add([e.degree, e.school, e.years, e.score].filter(Boolean).join(' | '), 'F1', 10, X, 2); }\nif ((R.extras || []).length) { section('Achievements & Certifications'); for (const x of R.extras) add('- ' + x, 'F1', 10, X + 12); }\nconst esc = s => s.replace(/\\\\/g, '\\\\\\\\').replace(/\\(/g, '\\\\(').replace(/\\)/g, '\\\\)');\nconst pages = []; let ops = [], y = 792;\nfor (const l of lines) {\n  const h = l.s * 1.35 + l.gap + (l.rule ? 4 : 0);\n  if (y - h < 50) { pages.push(ops.join('\\n')); ops = []; y = 792; }\n  y -= h;\n  ops.push(`BT /${l.f} ${l.s} Tf ${l.x} ${y.toFixed(1)} Td (${esc(l.t)}) Tj ET`);\n  if (l.rule) ops.push(`0.6 w ${X} ${(y - 3).toFixed(1)} m ${X + W} ${(y - 3).toFixed(1)} l S`);\n}\npages.push(ops.join('\\n'));\nconst objs = [];\nobjs[1] = '<< /Type /Catalog /Pages 2 0 R >>';\nobjs[3] = '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>';\nobjs[4] = '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>';\nconst kids = [];\npages.forEach((s, i) => { const p = 5 + i * 2; kids.push(p + ' 0 R'); objs[p] = `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents ${p + 1} 0 R >>`; objs[p + 1] = `<< /Length ${s.length} >>\\nstream\\n${s}\\nendstream`; });\nobjs[2] = `<< /Type /Pages /Kids [${kids.join(' ')}] /Count ${pages.length} >>`;\nlet pdf = '%PDF-1.4\\n'; const off = [];\nfor (let i = 1; i < objs.length; i++) { off[i] = pdf.length; pdf += `${i} 0 obj\\n${objs[i]}\\nendobj\\n`; }\nconst xref = pdf.length;\npdf += `xref\\n0 ${objs.length}\\n0000000000 65535 f \\n` + off.slice(1).map(o => String(o).padStart(10, '0') + ' 00000 n \\n').join('');\npdf += `trailer\\n<< /Size ${objs.length} /Root 1 0 R >>\\nstartxref\\n${xref}\\n%%EOF`;\n// ---- chat message ----\nconst h = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');\nconst ans = kit.answers || {};\nlet text = `🎯 <b>Apply kit: ${h(ctx.job.title)}</b> at ${h(ctx.job.company)}\\n\\n📄 Your tailored resume is above: skills and projects reordered for this role. Nothing made up.`;\ntext += `\\n\\n✍️ <b>Ready answers</b>\\n<b>Why should we hire you?</b>\\n${h(ans.why_hire)}\\n\\n<b>Why this role?</b>\\n${h(ans.why_role)}\\n\\n<b>Most relevant project</b>\\n${h(ans.relevant_project)}`;\nif ((kit.keywords_missing || []).length) text += `\\n\\n💡 <b>Resume tip:</b> this job mentions ${h(kit.keywords_missing.join(', '))}. Add them only if you really know them.`;\nif (kit.short_note) text += `\\n\\n✉️ <b>Short note for email/LinkedIn</b>\\n${h(kit.short_note)}`;\ntext += `\\n\\n👉 Tap <b>Open &amp; apply</b>, upload the tailored resume, paste the answers, then tap <b>Mark as applied</b>.`;\nif (text.length > 4000) text = text.slice(0, 3990) + '…';\nconst safe = s => A(s).replace(/[^A-Za-z0-9]+/g, '_').replace(/^_|_$/g, '').slice(0, 30);\nreturn [{ json: { ok: true, chatId: ctx.chatId, key: ctx.key, link: ctx.job.link || 'https://www.google.com', text, caption: `📄 Resume tailored for ${A(ctx.job.title)} at ${A(ctx.job.company)}`.slice(0, 1000) },\n  binary: { data: { data: Buffer.from(pdf, 'latin1').toString('base64'), mimeType: 'application/pdf', fileName: `${safe(R.name || 'Resume')}_${safe(ctx.job.company)}.pdf` } } }];\n"
+      },
+      "id": "5261fb4c-5058-4f5b-b851-edbf894710ff",
+      "name": "Build Kit",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1584,
+        944
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "9e9eb5cd-721a-4994-8f50-4028d5b280c1",
+              "leftValue": "={{ $json.ok }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "4ca508dd-bece-4b93-8d16-fcb0f7dfd214",
+      "name": "Kit OK?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1808,
+        944
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "sendDocument",
+        "chatId": "={{ $json.chatId }}",
+        "binaryData": true,
+        "additionalFields": {
+          "caption": "={{ $json.caption }}"
+        }
+      },
+      "id": "df5fcbe7-0675-4993-8e8e-fed657917030",
+      "name": "Send Tailored Resume",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        2032,
+        912
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Build Kit').item.json.chatId }}",
+        "text": "={{ $('Build Kit').item.json.text }}",
+        "replyMarkup": "inlineKeyboard",
+        "inlineKeyboard": {
+          "rows": [
+            {
+              "row": {
+                "buttons": [
+                  {
+                    "text": "🔗 Open & apply",
+                    "additionalFields": {
+                      "url": "={{ $('Build Kit').item.json.link }}"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "row": {
+                "buttons": [
+                  {
+                    "text": "📌 Mark as applied",
+                    "additionalFields": {
+                      "callback_data": "=done:{{ $('Build Kit').item.json.key }}"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        "additionalFields": {
+          "appendAttribution": false,
+          "disable_web_page_preview": true,
+          "parse_mode": "HTML"
+        }
+      },
+      "id": "b03b388c-51e4-4b9a-a6a2-188f3d2bfbd9",
+      "name": "Send Kit",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        2240,
+        912
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.chatId }}",
+        "text": "={{ $json.text }}",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "id": "50af0b81-d011-4a11-8c2f-9fc880071510",
+      "name": "Kit Failed",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        2032,
+        1072
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// ---- daily search limits: 10 per user, 150 for the whole bot (protects the free API quota)\nconst _today = new Date(Date.now() + 5.5 * 3600e3).toISOString().slice(0, 10);\nconst _useSearch = (st, id) => {\n  st.usage = st.usage || {};\n  const g = st.usage._global && st.usage._global.day === _today ? st.usage._global : (st.usage._global = { day: _today, search: 0 });\n  let u = st.usage[id]; if (!u || u.day !== _today) u = st.usage[id] = { day: _today };\n  if ((u.search || 0) >= 10) return \"🔍 You've done 10 searches today (the free daily limit). Come back tomorrow, or type more to see more results from your last search 🙂\";\n  if ((g.search || 0) >= 150) return \"😅 InternBot is very popular today and hit its daily search limit. Please try again tomorrow!\";\n  u.search = (u.search || 0) + 1; g.search = (g.search || 0) + 1; return null;\n};\nconst r = $('Route').first().json;\nconst chatId = r.chatId;\nconst store = $getWorkflowStaticData('global');\nstore.pending = store.pending || {};\nconst CITIES = { 'bengaluru': 'Bengaluru', 'bangalore': 'Bengaluru', 'blr': 'Bengaluru', 'pune': 'Pune', 'hyderabad': 'Hyderabad', 'hyd': 'Hyderabad', 'chennai': 'Chennai', 'mumbai': 'Mumbai', 'bombay': 'Mumbai', 'navi mumbai': 'Navi Mumbai', 'delhi': 'Delhi NCR', 'new delhi': 'Delhi NCR', 'delhi ncr': 'Delhi NCR', 'ncr': 'Delhi NCR', 'noida': 'Noida', 'gurgaon': 'Gurugram', 'gurugram': 'Gurugram', 'kolkata': 'Kolkata', 'ahmedabad': 'Ahmedabad', 'kochi': 'Kochi', 'cochin': 'Kochi', 'jaipur': 'Jaipur', 'chandigarh': 'Chandigarh', 'indore': 'Indore', 'coimbatore': 'Coimbatore', 'trivandrum': 'Thiruvananthapuram', 'thiruvananthapuram': 'Thiruvananthapuram', 'mysore': 'Mysuru', 'mysuru': 'Mysuru', 'mangalore': 'Mangaluru', 'mangaluru': 'Mangaluru', 'nagpur': 'Nagpur', 'bhubaneswar': 'Bhubaneswar', 'lucknow': 'Lucknow', 'vizag': 'Visakhapatnam', 'visakhapatnam': 'Visakhapatnam' };\nconst title = s => s.replace(/\\b\\w/g, ch => ch.toUpperCase());\nfunction parse(text) {\n  const t = ' ' + String(text || '').toLowerCase() + ' ';\n  const p = { location: null, type: null, mode: null };\n  if (/\\b(remote|wfh|work from home)\\b/.test(t)) p.mode = 'Remote';\n  if (/\\bhybrid\\b/.test(t)) p.mode = 'Hybrid';\n  if (/\\b(on[- ]?site|in[- ]?office)\\b/.test(t)) p.mode = 'On-site';\n  if (/\\bintern(ship)?s?\\b/.test(t)) p.type = 'Internship';\n  if (/\\bfull[- ]?time\\b/.test(t)) p.type = 'Full-time';\n  if (/\\bpart[- ]?time\\b/.test(t)) p.type = 'Part-time';\n  let cityKey = null;\n  for (const k of Object.keys(CITIES).sort((a, b) => b.length - a.length)) if (new RegExp('\\\\b' + k + '\\\\b').test(t)) { p.location = CITIES[k]; cityKey = k; break; }\n  if (!p.location) { const m = String(text).match(/\\b(?:in|at|near)\\s+([a-zA-Z .]{3,30})$/i); if (m && !/remote|india|office|hybrid/i.test(m[1])) p.location = title(m[1].trim()); }\n  if (!p.location && /\\b(india|anywhere|pan india)\\b/.test(t)) p.location = 'Anywhere in India';\n  if (p.mode === 'Remote' && !p.location) p.location = 'Remote';\n  let role = String(text || '')\n    .replace(/\\b(full[- ]?time|part[- ]?time|internships?|interns?|remote|wfh|work from home|hybrid|on[- ]?site|in[- ]?office|jobs?|roles?|openings?|positions?|vacanc(y|ies)|pan india|anywhere|india)\\b/gi, ' ')\n    .replace(/\\b(in|at|near)\\s+[a-zA-Z .]+$/i, ' ');\n  if (cityKey) role = role.replace(new RegExp('\\\\b' + cityKey + '\\\\b', 'ig'), ' ');\n  p.role = role.replace(/\\b(in|at|near|for|a|an)\\s*$/i, '').replace(/\\s+/g, ' ').trim();\n  return p;\n}\nlet p;\nif (r.route === 'filter') {\n  p = store.pending[chatId];\n  if (!p || Date.now() - p.ts > 15 * 60e3) { delete store.pending[chatId]; return [{ json: { kind: 'reply', chatId, text: 'Tell me a role to search, e.g. \"frontend developer\" 🙂' } }]; }\n  const data = r.callback_query?.data;\n  if (data) {\n    const [, field, ...rest] = data.split(':'); const val = rest.join(':');\n    if (field === 'loc') { p.location = val; if (val === 'Remote') p.mode = 'Remote'; }\n    if (field === 'type') p.type = val;\n    if (field === 'mode') p.mode = val;\n  } else {\n    const a = r.text.trim(); const ans = parse(a);\n    if (p.asking === 'location') {\n      if (ans.location) { p.location = ans.location; if (ans.mode) p.mode = ans.mode; }\n      else if (/\\b(developer|engineer|analyst|designer|manager|scientist|marketing|sales|writer|hr|intern|consultant|associate)\\b/i.test(a)) p = null;\n      else if (/\\bany(where)?\\b/i.test(a)) p.location = 'Anywhere in India';\n      else p.location = title(a);\n    } else if (p.asking === 'type') {\n      if (ans.type) p.type = ans.type; else if (/\\b(any|all|both|either)\\b/i.test(a)) p.type = 'Any'; else p = null;\n    } else if (p.asking === 'mode') {\n      if (ans.mode) p.mode = ans.mode; else if (/\\b(any|all|either|no pref)/i.test(a)) p.mode = 'Any'; else p = null;\n    }\n    if (!p) { delete store.pending[chatId]; p = parse(a); if (!p.role) p.role = a; }\n  }\n} else {\n  const text = r.route === 'ask' ? $('Decide').first().json.query : r.text;\n  p = parse(text);\n  if (!p.role) p.role = text;\n}\nconst ask = (field, kind) => { p.asking = field; p.ts = Date.now(); store.pending[chatId] = p; return [{ json: { kind, chatId, role: p.role } }]; };\nif (!p.location) return ask('location', 'ask_loc');\nif (!p.type) return ask('type', 'ask_type');\nif (!p.mode) return ask('mode', 'ask_mode');\ndelete store.pending[chatId];\nconst _lim = _useSearch(store, chatId);\nif (_lim) return [{ json: { kind: 'reply', chatId, text: _lim } }];\nconst typeWord = { 'Internship': 'internship', 'Full-time': 'full time', 'Part-time': 'part time' }[p.type] || '';\nconst modeWord = { 'Remote': 'remote', 'Hybrid': 'hybrid', 'On-site': 'onsite' }[p.mode] || '';\nconst where = (p.location === 'Remote' || p.location === 'Anywhere in India') ? 'in India' : 'in ' + p.location;\nconst query = [p.role, typeWord, modeWord, where].filter(Boolean).join(' ');\nconst label = [p.role, p.type === 'Any' ? 'any type' : p.type, p.mode === 'Any' ? 'any work mode' : p.mode, p.location].join(' · ');\nreturn [{ json: { kind: 'go', chatId, query, label } }];\n"
+      },
+      "id": "24ff37cc-de7a-4ffc-88f2-8233807e9a53",
+      "name": "Search Wizard",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        704,
+        2272
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "12a329b9-d17d-407e-8e31-9c9820b253e2",
+                    "leftValue": "={{ $json.kind }}",
+                    "rightValue": "go",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "go"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "67ec89a2-4174-4ad0-81cf-6f0433e5d2e5",
+                    "leftValue": "={{ $json.kind }}",
+                    "rightValue": "ask_loc",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "ask_loc"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "86ba1af5-1dbe-4661-80fb-7f93edabd31e",
+                    "leftValue": "={{ $json.kind }}",
+                    "rightValue": "ask_type",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "ask_type"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "58c60646-b380-43d6-a17d-467c6adedaea",
+                    "leftValue": "={{ $json.kind }}",
+                    "rightValue": "ask_mode",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "ask_mode"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "5f89bbb0-55cb-4663-9322-3671c5f8cb1d",
+                    "leftValue": "={{ $json.kind }}",
+                    "rightValue": "reply",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "reply"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "3469e8db-1db7-4dc7-9564-c2ad10bb818d",
+      "name": "Wizard Step",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        928,
+        2272
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.chatId }}",
+        "text": "=📍 Where should I look for {{ $json.role }} roles? Tap one, or type a city.",
+        "replyMarkup": "inlineKeyboard",
+        "inlineKeyboard": {
+          "rows": [
+            {
+              "row": {
+                "buttons": [
+                  {
+                    "text": "Bengaluru",
+                    "additionalFields": {
+                      "callback_data": "f:loc:Bengaluru"
+                    }
+                  },
+                  {
+                    "text": "Pune",
+                    "additionalFields": {
+                      "callback_data": "f:loc:Pune"
+                    }
+                  },
+                  {
+                    "text": "Hyderabad",
+                    "additionalFields": {
+                      "callback_data": "f:loc:Hyderabad"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "row": {
+                "buttons": [
+                  {
+                    "text": "Chennai",
+                    "additionalFields": {
+                      "callback_data": "f:loc:Chennai"
+                    }
+                  },
+                  {
+                    "text": "Mumbai",
+                    "additionalFields": {
+                      "callback_data": "f:loc:Mumbai"
+                    }
+                  },
+                  {
+                    "text": "Delhi NCR",
+                    "additionalFields": {
+                      "callback_data": "f:loc:Delhi NCR"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "row": {
+                "buttons": [
+                  {
+                    "text": "🏠 Remote",
+                    "additionalFields": {
+                      "callback_data": "f:loc:Remote"
+                    }
+                  },
+                  {
+                    "text": "🇮🇳 Anywhere in India",
+                    "additionalFields": {
+                      "callback_data": "f:loc:Anywhere in India"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "id": "8a38b8cc-9310-446d-9a24-ea9f9edfd161",
+      "name": "Ask Location",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1152,
+        2208
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.chatId }}",
+        "text": "=💼 What type of role are you looking for?",
+        "replyMarkup": "inlineKeyboard",
+        "inlineKeyboard": {
+          "rows": [
+            {
+              "row": {
+                "buttons": [
+                  {
+                    "text": "🎓 Internship",
+                    "additionalFields": {
+                      "callback_data": "f:type:Internship"
+                    }
+                  },
+                  {
+                    "text": "💼 Full-time",
+                    "additionalFields": {
+                      "callback_data": "f:type:Full-time"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "row": {
+                "buttons": [
+                  {
+                    "text": "⏱ Part-time",
+                    "additionalFields": {
+                      "callback_data": "f:type:Part-time"
+                    }
+                  },
+                  {
+                    "text": "🤷 Any",
+                    "additionalFields": {
+                      "callback_data": "f:type:Any"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "id": "0da6c991-ef64-48dc-ba06-72ba9a501f03",
+      "name": "Ask Type",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1152,
+        2352
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.chatId }}",
+        "text": "=🏢 Which work mode do you prefer?",
+        "replyMarkup": "inlineKeyboard",
+        "inlineKeyboard": {
+          "rows": [
+            {
+              "row": {
+                "buttons": [
+                  {
+                    "text": "🏢 On-site",
+                    "additionalFields": {
+                      "callback_data": "f:mode:On-site"
+                    }
+                  },
+                  {
+                    "text": "🔀 Hybrid",
+                    "additionalFields": {
+                      "callback_data": "f:mode:Hybrid"
+                    }
+                  },
+                  {
+                    "text": "🏠 Remote",
+                    "additionalFields": {
+                      "callback_data": "f:mode:Remote"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "row": {
+                "buttons": [
+                  {
+                    "text": "🤷 Any",
+                    "additionalFields": {
+                      "callback_data": "f:mode:Any"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "id": "5a28c5c2-9ad8-4800-ac47-ea27ed8fcbc0",
+      "name": "Ask Mode",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1152,
+        2480
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const r = $('Route').first().json;\nconst id = r.chatId;\nconst data = r.callback_query?.data || '';\nif (data === 'del:yes') {\n  const st = $getWorkflowStaticData('global');\n  for (const k of ['profiles', 'applications', 'jobIndex', 'lastSearch', 'pending']) if (st[k]) delete st[k][id];\n  return [{ json: { kind: 'msg', chatId: id, text: '🗑️ Done! Your resume, profile, searches and application history are deleted. Send a new resume anytime to start again.' } }];\n}\nif (data === 'del:no') return [{ json: { kind: 'msg', chatId: id, text: \"👍 No problem, I've kept everything.\" } }];\nreturn [{ json: { kind: 'confirm', chatId: id } }];\n"
+      },
+      "id": "04a28888-3aa8-4500-9bc3-659e977bf10a",
+      "name": "Delete Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        704,
+        2640
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "ed53538e-7ab0-49e1-ad45-635fad6a0366",
+                    "leftValue": "={{ $json.kind }}",
+                    "rightValue": "confirm",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "confirm"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "3f510034-fee5-4263-8506-2c48486c77ad",
+                    "leftValue": "={{ $json.kind }}",
+                    "rightValue": "msg",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "msg"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "19b5e7b4-1ce3-4feb-869c-5e8c27ba2d6a",
+      "name": "Delete Step",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        928,
+        2640
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.chatId }}",
+        "text": "=⚠️ This will permanently delete your resume, profile, searches and application history. Are you sure?",
+        "replyMarkup": "inlineKeyboard",
+        "inlineKeyboard": {
+          "rows": [
+            {
+              "row": {
+                "buttons": [
+                  {
+                    "text": "🗑️ Yes, delete my data",
+                    "additionalFields": {
+                      "callback_data": "del:yes"
+                    }
+                  },
+                  {
+                    "text": "Cancel",
+                    "additionalFields": {
+                      "callback_data": "del:no"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "id": "38eceec5-2210-4650-b79e-c4ae572ddc14",
+      "name": "Confirm Delete",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1152,
+        2608
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.chatId }}",
+        "text": "={{ $json.text }}",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "id": "615139b9-63f6-4f93-9791-bee2d8498ab2",
+      "name": "Send Delete Msg",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1152,
+        2752
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.chatId }}",
+        "text": "={{ $json.limitText }}",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "id": "4f75ea7f-1c63-4491-8069-3d0ada4d55aa",
+      "name": "Send Limited",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        704,
+        2880
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "",
+          "name": "Telegram account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Telegram Trigger": {
+      "main": [
+        [
+          {
+            "node": "Route",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route": {
+      "main": [
+        [
+          {
+            "node": "Switch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch": {
+      "main": [
+        [
+          {
+            "node": "Download Resume",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Welcome",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Load Profile",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Search Wizard",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Parse Button",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Fallback",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Load Applications",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "More Jobs",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Friendly Reply",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Ask Context",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Search Wizard",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Delete Data",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send Limited",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download Resume": {
+      "main": [
+        [
+          {
+            "node": "Extract PDF Text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract PDF Text": {
+      "main": [
+        [
+          {
+            "node": "Gemini: Parse Resume",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini: Parse Resume": {
+      "main": [
+        [
+          {
+            "node": "Save Profile",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Gemini: Parse Resume (backup)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Profile": {
+      "main": [
+        [
+          {
+            "node": "Send Profile Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Profile": {
+      "main": [
+        [
+          {
+            "node": "Send Profile",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Searching Msg": {
+      "main": [
+        [
+          {
+            "node": "Build Query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Query": {
+      "main": [
+        [
+          {
+            "node": "JSearch API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "JSearch API": {
+      "main": [
+        [
+          {
+            "node": "Prepare Jobs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Jobs": {
+      "main": [
+        [
+          {
+            "node": "Any Jobs?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Any Jobs?": {
+      "main": [
+        [
+          {
+            "node": "Gemini: Rank Jobs",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini: Rank Jobs": {
+      "main": [
+        [
+          {
+            "node": "Build Cards",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Gemini: Rank Jobs (backup)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Cards": {
+      "main": [
+        [
+          {
+            "node": "Send Job Card",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini: Parse Resume (backup)": {
+      "main": [
+        [
+          {
+            "node": "Save Profile",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini: Rank Jobs (backup)": {
+      "main": [
+        [
+          {
+            "node": "Build Cards",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Button": {
+      "main": [
+        [
+          {
+            "node": "Button Action",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Button Action": {
+      "main": [
+        [
+          {
+            "node": "Drafting Msg",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Log Application",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Job Expired",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Drafting Msg": {
+      "main": [
+        [
+          {
+            "node": "Gemini: Apply Kit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Application": {
+      "main": [
+        [
+          {
+            "node": "Send Logged",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Applications": {
+      "main": [
+        [
+          {
+            "node": "Send Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "More Jobs": {
+      "main": [
+        [
+          {
+            "node": "More Kind",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "More Kind": {
+      "main": [
+        [
+          {
+            "node": "Send Job Card",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Searching Msg",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "More Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Friendly Reply": {
+      "main": [
+        [
+          {
+            "node": "Send Friendly",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini: Understand": {
+      "main": [
+        [
+          {
+            "node": "Decide",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Gemini: Understand (backup)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini: Understand (backup)": {
+      "main": [
+        [
+          {
+            "node": "Decide",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Decide": {
+      "main": [
+        [
+          {
+            "node": "Ask Kind",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ask Kind": {
+      "main": [
+        [
+          {
+            "node": "Search Wizard",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send Answer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ask Context": {
+      "main": [
+        [
+          {
+            "node": "Gemini: Understand",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini: Apply Kit": {
+      "main": [
+        [
+          {
+            "node": "Build Kit",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Gemini: Apply Kit (backup)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini: Apply Kit (backup)": {
+      "main": [
+        [
+          {
+            "node": "Build Kit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Kit": {
+      "main": [
+        [
+          {
+            "node": "Kit OK?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Kit OK?": {
+      "main": [
+        [
+          {
+            "node": "Send Tailored Resume",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Kit Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Tailored Resume": {
+      "main": [
+        [
+          {
+            "node": "Send Kit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Search Wizard": {
+      "main": [
+        [
+          {
+            "node": "Wizard Step",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wizard Step": {
+      "main": [
+        [
+          {
+            "node": "Searching Msg",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Ask Location",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Ask Type",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Ask Mode",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send Answer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Delete Data": {
+      "main": [
+        [
+          {
+            "node": "Delete Step",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Delete Step": {
+      "main": [
+        [
+          {
+            "node": "Confirm Delete",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send Delete Msg",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "saveExecutionProgress": true,
+    "saveDataSuccessExecution": "all",
+    "saveDataErrorExecution": "all"
+  },
+  "nodeGroups": []
+}

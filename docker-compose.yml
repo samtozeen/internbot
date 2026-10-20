@@ -1,0 +1,15 @@
+# Run InternBot locally: docker compose up -d  ->  open http://localhost:5678
+services:
+  n8n:
+    image: docker.n8n.io/n8nio/n8n
+    restart: unless-stopped
+    ports:
+      - "5678:5678"
+    env_file: .env
+    environment:
+      - N8N_RUNNERS_ENABLED=true
+      - N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS=true
+    volumes:
+      - n8n_data:/home/node/.n8n
+volumes:
+  n8n_data:
