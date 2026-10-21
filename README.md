@@ -4,8 +4,8 @@
 
 Built with **n8n** (no backend code server), **Telegram Bot API**, **Google Gemini** and **JSearch** (LinkedIn, Indeed, Glassdoor & more).
 
-<!-- Replace with your demo GIF/video -->
-<p align="center"><img src="screenshots/demo.gif" width="320" alt="InternBot demo"/></p>
+
+### ▶️ [Click here to watch the demo video](https://1drv.ms/v/c/c2defe87e464a49e/IQA1jrj6fTH1SY699gFlNN3kASHfbxMX_EJ5T-u5oIPXiD8?e=bP4EPv)
 
 ---
 
@@ -102,6 +102,6 @@ Then in n8n:
 - [ ] Interview-prep questions per job
 
 ## 👤 Author
-**Sam Tozeen** — [LinkedIn](https://www.linkedin.com/in/sam-tozeen-336216376?utm_source=share_via&utm_content=profile&utm_medium=member_android) · Try the bot: [@your_bot_username](https://t.me/your_bot_username)
+**Sam Tozeen** — [LinkedIn](https://www.linkedin.com/in/sam-tozeen-336216376?utm_source=share_via&utm_content=profile&utm_medium=member_android) · 
 
 Licensed under MIT.
