@@ -1,4 +1,4 @@
-# 🎓 InternBot — AI internship finder on Telegram
+# 🎓 ApplyMate — AI internship finder on Telegram
 
 > Type a role. Get real internships ranked against your resume. Tap **Apply** and get a resume tailored to that exact job — in under 30 seconds, inside Telegram.
 
@@ -18,7 +18,7 @@ Students apply to dozens of internships across 5+ portals. For each one they:
 
 Most give up tailoring and spray the same resume everywhere.
 
-## ✨ What InternBot does
+## ✨ What ApplyMate does
 
 | | Feature | How |
 |---|---|---|
